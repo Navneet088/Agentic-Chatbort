@@ -74,22 +74,21 @@ class Graphbuilder:
         return workflow.compile()
 
     def blog_generator_graph(self):
-            """Build a sequential pipeline for blog title and content generation."""
-            workflow = StateGraph(State)
-            blog_node = BlogNode(self.llm)
+        """Build a sequential pipeline for blog title and content generation (Cloud Memory Optimized)."""
+        workflow = StateGraph(State)
+        blog_node = BlogNode(self.llm)
 
-            # Nodes Registration
-            workflow.add_node("generate_title", blog_node.generate_title)
-            workflow.add_node("generate_content", blog_node.generate_content)
-            workflow.add_node("save_blog", blog_node.save_blog)
+        # Nodes Registration (🎯 REMOVED: save_blog node completely)
+        workflow.add_node("generate_title", blog_node.generate_title)
+        workflow.add_node("generate_content", blog_node.generate_content)
 
-            # Execution Flow Set
-            workflow.add_edge(START, "generate_title")
-            workflow.add_edge("generate_title", "generate_content")
-            workflow.add_edge("generate_content", "save_blog")
-            workflow.add_edge("save_blog", END)
-            
-            return workflow.compile()    
+        # Execution Flow Set (🎯 DIRECT MEMORY CHANNEL FLOW)
+        # Flow: START -> generate_title -> generate_content -> END (No Disk Writes!)
+        workflow.add_edge(START, "generate_title")
+        workflow.add_edge("generate_title", "generate_content")
+        workflow.add_edge("generate_content", END) # Seedhe khatam, no save_blog block!
+        
+        return workflow.compile()    
 
     def setup_graph(self, usecase: str):
         """Sets up and compiles the graph for the selected use case dynamically without state collisions."""

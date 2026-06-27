@@ -51,8 +51,7 @@ class DisplayResultStreamlit:
                         
                 elif isinstance(message, AIMessage) and message.content:
                     with st.chat_message("assistant", avatar="🌐"):
-                        st.write(message.content)
-                    
+                        st.markdown(message.content)
                     st.session_state.chat_history.append({"role": "assistant", "content": message.content})
         
         # --- 3. USECASE: AI NEWS MANAGEMENT ---
@@ -68,54 +67,55 @@ class DisplayResultStreamlit:
             if not frequency:
                 st.warning("⚠️ Clear frequency configuration target missing.")
             else:
-                with st.spinner(f"🔄 Compiling comprehensive AI news matrix... Please wait."):
+                with st.spinner("🔄 Compiling comprehensive AI news matrix... Please wait."):
                     try: 
+                        # Direct state transmission channel
                         graph_output = graph.invoke({"messages": [("user", frequency)]})
-                        graph_summary = graph_output.get('summary')
                         
-                        current_dir = os.path.dirname(os.path.abspath(__file__))
-                        project_root = current_dir.split("src")[0] if "src" in current_dir else current_dir
-                        ai_news_file_path = os.path.join(project_root, "AINews", f"{frequency}_summary.md")
+                        # --- 🎯 FIXED: NO HARD DRIVE FILE READS ---
+                        # State dictionary ya last output context se seedhe data nikalna
+                        markdown_content = graph_output.get('summary', '')
                         
-                        markdown_content = ""
-                        if os.path.exists(ai_news_file_path):
-                            with open(ai_news_file_path, "r", encoding="utf-8") as file:
-                                markdown_content = file.read()
-                        elif graph_summary and graph_summary != "No active data blocks available to summarize.":
-                            markdown_content = graph_summary
-                        
-                        if markdown_content:
+                        if not markdown_content and "messages" in graph_output and graph_output["messages"]:
+                            last_msg = graph_output["messages"][-1]
+                            if hasattr(last_msg, 'content'): 
+                                markdown_content = last_msg.content
+
+                        if markdown_content and markdown_content != "No active data blocks available to summarize.":
                             with st.container(border=True):
                                 st.markdown(markdown_content)
                             st.session_state.chat_history.append({"role": "assistant", "content": markdown_content})
                         else:
-                            st.error("❌ State tracking lost.")
+                            st.error("❌ State tracking lost or empty data block returned.")
                     except Exception as system_error:
                         st.error(f"❌ Core Error: {str(system_error)}")
         
         # --- 4. USECASE: BLOG GENERATOR ---
         elif usecase == "Blog Generator":
-            with st.spinner("✍️ Writing publication-ready technical blog... Please wait."):
+            with st.spinner("✍️ Writing technical publication via Groq Matrix..."):
                 try:
-                    graph_output = graph.invoke({"messages": [("user", user_message)]})
-                    blog_text = graph_output.get('blog_content')
+                    # --- 🎯 FIXED: Changed 'active_graph' to 'graph' to fix NameError ---
+                    res = graph.invoke({"messages": [("user", user_message)]})
+                    blog_text = res.get("blog_content", "")
                     
-                    if not blog_text and graph_output.get('blog'):
-                        blog_obj = graph_output.get('blog')
-                        if hasattr(blog_obj, 'title') and hasattr(blog_obj, 'content'):
-                            blog_text = f"# {blog_obj.title}\n\n{blog_obj.content}"
-                        elif isinstance(blog_obj, dict):
-                            blog_text = f"# {blog_obj.get('title', '')}\n\n{blog_obj.get('content', '')}"
+                    # Fallback resolution layer if key structural mismatch happens
+                    if not blog_text and res.get("blog"):
+                        blog_obj = res.get("blog")
+                        if hasattr(blog_obj, 'content'):
+                            blog_text = blog_obj.content
                     
                     if blog_text:
-                        # Clean and elegant standard container
-                        with st.container(border=True):
+                        with st.chat_message("assistant", avatar="📝"):
                             st.markdown(blog_text)
-                        
                         st.session_state.chat_history.append({"role": "assistant", "content": blog_text})
-                        st.markdown("<br>", unsafe_allow_html=True) # <-- Sahi argument update kar diya hai
-                        st.download_button("📥 Export Production Blog (.md)", data=blog_text, file_name="generated_blog.md", use_container_width=True)
+                        
+                        st.download_button(
+                            "📥 Download Blog (.md)", 
+                            data=blog_text, 
+                            file_name="generated_blog.md", 
+                            use_container_width=True
+                        )
                     else:
-                        st.error("⚠️ State sync failed: No content returned.")
-                except Exception as e:
-                    st.error(f"❌ Execution Error inside Blog Chain: {str(e)}")
+                        st.error("⚠️ Failed to extract blog layout metadata structure from state.")
+                except Exception as blog_error:
+                    st.error(f"❌ Execution Error inside Blog Chain: {str(blog_error)}")
