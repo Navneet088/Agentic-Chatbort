@@ -86,8 +86,8 @@ class AiNewsNode:
             ("user", "Articles:\n{articles}")
         ])
         
+        # --- 🎯 FIXED: Removed duplicate line inside list comprehension ---
         articles_str = "\n\n".join([
-            f"Content: {item.get('content', '')}\nURL: {item.get('url', '')}\nDate: {item.get('published_date', '')}"
             f"Content: {item.get('content', '')}\nURL: {item.get('url', '')}\nDate: {item.get('published_date', '')}"
             for item in new_items
         ])
@@ -96,7 +96,6 @@ class AiNewsNode:
         response = self.llm.invoke(prompt_value)
         
         # --- 🎯 DIRECT CHAT HISTORY STREAM INJECTION ---
-        # Format karke message object banayenge taaki UI direct history se render kare
         header = f"# {frequency.capitalize()} AI News Summary\n\n"
         final_markdown = header + response.content
         
@@ -107,6 +106,4 @@ class AiNewsNode:
 
     def save_result(self, state: dict) -> dict:
         """🎯 NO DISK WRITE! File system bypassed completely."""
-        # Disk par open() karke file write karne ka code 100% delete kar diya hai!
-        # Ab cloud sandbox par koi error nahi aayega aur graph smooth end hoga.
         return {"filename": "Memory_Bypassed_Direct_Show"}
