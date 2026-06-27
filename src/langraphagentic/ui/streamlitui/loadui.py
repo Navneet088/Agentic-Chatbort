@@ -18,19 +18,20 @@ class LoadStreamlitUI:
         # --- ⚡ CLEAN & ATTRACTIVE PREMIUM TITLE CSS ---
         st.markdown("""
             <style>
-                /* Soft Metallic White Title - Zero AI-generated Gradient vibe */
+                /* Main Page Title Gradient Style */
                 .main-title { 
-                    font-size: 2.3rem; 
-                    font-weight: 700; 
-                    color: #f8fafc; /* Professional Off-White */
-                    letter-spacing: -0.03em;
+                    font-size: 2.4rem; 
+                    font-weight: 800; 
+                    background: linear-gradient(45deg, #00f2fe, #4facfe); 
+                    -webkit-background-clip: text; 
+                    -webkit-text-fill-color: transparent; 
                     padding-bottom: 2px;
                     margin-bottom: 0.2rem;
                 }
-                /* Muted Subtitle */
+                /* Subtitle / Description */
                 .sub-title { 
                     font-size: 1rem; 
-                    color: #94a3b8; 
+                    color: #a1a1aa; 
                     margin-bottom: 1.8rem; 
                 }
                 /* Customized Sidebar Styling Elements */

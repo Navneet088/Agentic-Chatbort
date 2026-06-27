@@ -73,31 +73,15 @@ class DisplayResultStreamlit:
                         graph_output = graph.invoke({"messages": [("user", frequency)]})
                         graph_summary = graph_output.get('summary')
                         
-                        # --- SECURE CLOUD PATH RESOLUTION FIX ---
                         current_dir = os.path.dirname(os.path.abspath(__file__))
-                        
-                        # Cloud platforms standard base detection fallback
-                        if "src" in current_dir:
-                            project_root = current_dir.split("src")[0]
-                        else:
-                            project_root = current_dir
-                            
-                        # Folder path assembly under project container root context instead of OS absolute root
-                        ai_news_dir = os.path.join(project_root, "AINews")
-                        ai_news_file_path = os.path.join(ai_news_dir, f"{frequency}_summary.md")
+                        project_root = current_dir.split("src")[0] if "src" in current_dir else current_dir
+                        ai_news_file_path = os.path.join(project_root, "AINews", f"{frequency}_summary.md")
                         
                         markdown_content = ""
-                        
-                        # Safely try reading from disk if it exists
                         if os.path.exists(ai_news_file_path):
-                            try:
-                                with open(ai_news_file_path, "r", encoding="utf-8") as file:
-                                    markdown_content = file.read()
-                            except Exception:
-                                pass # Fallback to graph memory if OS system read blocks
-                                
-                        # Direct Fallback Bypass (Bina file parameters system permission issues ke chalega)
-                        if not markdown_content and graph_summary and graph_summary != "No active data blocks available to summarize.":
+                            with open(ai_news_file_path, "r", encoding="utf-8") as file:
+                                markdown_content = file.read()
+                        elif graph_summary and graph_summary != "No active data blocks available to summarize.":
                             markdown_content = graph_summary
                         
                         if markdown_content:
@@ -124,11 +108,12 @@ class DisplayResultStreamlit:
                             blog_text = f"# {blog_obj.get('title', '')}\n\n{blog_obj.get('content', '')}"
                     
                     if blog_text:
+                        # Clean and elegant standard container
                         with st.container(border=True):
                             st.markdown(blog_text)
                         
                         st.session_state.chat_history.append({"role": "assistant", "content": blog_text})
-                        st.markdown("<br>", unsafe_allow_html=True)
+                        st.markdown("<br>", unsafe_allow_html=True) # <-- Sahi argument update kar diya hai
                         st.download_button("📥 Export Production Blog (.md)", data=blog_text, file_name="generated_blog.md", use_container_width=True)
                     else:
                         st.error("⚠️ State sync failed: No content returned.")
