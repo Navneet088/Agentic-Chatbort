@@ -1,0 +1,11 @@
+langchain
+langgraph
+langchain-core
+langchain-community
+python-dotenv
+langchain-openai
+langchain-groq
+arxiv==2.1.0
+wikipedia
+langgraph-cli[inmem]
+tavily-python
