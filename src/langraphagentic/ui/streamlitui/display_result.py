@@ -4,23 +4,25 @@ import builtins
 import streamlit as st
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
-# --- 🎯 DIRECT SHOW INTERCEPTOR (NO FILE SYSTEM WRITE) ---
-# Yeh code backend nodes ke file saving logic ko runtime par hijack kar lega
-# Taaki cloud par kisi bhi tarah ka Permission Error (Errno 13) na aaye
+# --- 🎯 TARGETED INTERCEPTOR (ONLY FOR NEWS & BLOGS WRITING) ---
 original_open = builtins.open
 
 def cloud_safe_open(file, mode='r', *args, **kwargs):
-    if isinstance(file, str) and ("/mount/" in file or "AINews" in file or "GeneratedBlogs" in file):
-        # Fake file handler class jo memory me hi write operations ko fake kar deti hai
+    # Sirf tabhi intercept karenge jab specified folders targeted ho file parameter me
+    if isinstance(file, str) and ("AINews" in file or "GeneratedBlogs" in file):
         class FakeFile:
             def __enter__(self): return self
             def __exit__(self, exc_type, exc_val, exc_tb): pass
             def write(self, content): st.session_state['last_intercepted_content'] = content
             def read(self): return st.session_state.get('last_intercepted_content', '')
+            def flush(self): pass
+            def close(self): pass
         return FakeFile()
+    
+    # Baki system files (like app configs, layouts, requirements) normal tarike se load hongi
     return original_open(file, mode, *args, **kwargs)
 
-# Patch ko application me apply karein
+# Securely bind only the filtered logic
 builtins.open = cloud_safe_open
 # ---------------------------------------------------------
 
@@ -35,7 +37,6 @@ class DisplayResultStreamlit:
         graph = self.graph
         user_message = self.user_message
         
-        # Initialize internal storage if not exist
         if 'last_intercepted_content' not in st.session_state:
             st.session_state['last_intercepted_content'] = ""
         
@@ -90,11 +91,10 @@ class DisplayResultStreamlit:
                 st.warning("⚠️ Clear frequency configuration target missing.")
             else:
                 with st.spinner("🔄 Compiling AI news matrix... Please wait."):
-                    st.session_state['last_intercepted_content'] = "" # Reset
+                    st.session_state['last_intercepted_content'] = ""
                     try: 
                         graph_output = graph.invoke({"messages": [("user", frequency)]})
                         
-                        # Data Extraction Preference: Memory State -> Intercepted Content
                         markdown_content = ""
                         if graph_output and isinstance(graph_output, dict):
                             markdown_content = graph_output.get('summary', '')
@@ -114,7 +114,7 @@ class DisplayResultStreamlit:
         # --- 4. USECASE: BLOG GENERATOR ---
         elif usecase == "Blog Generator":
             with st.spinner("✍️ Writing publication-ready technical blog... Please wait."):
-                st.session_state['last_intercepted_content'] = "" # Reset
+                st.session_state['last_intercepted_content'] = ""
                 try:
                     graph_output = graph.invoke({"messages": [("user", user_message)]})
                     
@@ -126,7 +126,6 @@ class DisplayResultStreamlit:
                             if hasattr(blog_obj, 'content'): blog_text = blog_obj.content
                             elif isinstance(blog_obj, dict): blog_text = blog_obj.get('content', '')
                     
-                    # Agar graph state me nahi mila, toh automatic fake-file handler se uthayenge
                     if not blog_text:
                         blog_text = st.session_state['last_intercepted_content']
                     
