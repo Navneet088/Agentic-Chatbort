@@ -1,8 +1,7 @@
-from src.langraphagentic.nodes.chatbot_with_tools_node import ChatbotWithtoolsNode
+import os
 from tavily import TavilyClient 
 from langchain_core.messages import AIMessage
 from langchain_core.prompts import ChatPromptTemplate
-import os
 
 class AiNewsNode:
     def __init__(self, llm):
@@ -12,13 +11,12 @@ class AiNewsNode:
 
     def fetch_news(self, state: dict) -> dict:
         """Fetch AI news based on the frequency found in the state safely."""  
-        # Tavily runtime backup client setup
         if not self.tavily:
             api_key = os.environ.get("TAVILY_API_KEY") or os.getenv("TAVILY_API_KEY")
             if api_key:
                 self.tavily = TavilyClient(api_key=api_key)
             else:
-                # If key is completely missing, fast-forward with safe fake data gracefully
+                # API key missing fallback
                 return {
                     "frequency": "daily",
                     "news_data": [{"content": "Tavily API key was not injected or missing in environment context.", "url": "#", "published_date": "2026-06-27"}]
@@ -29,7 +27,7 @@ class AiNewsNode:
             if not messages_list:
                 return {"frequency": "daily", "news_data": []}
                 
-            raw_content = messages_list[-1].content
+            raw_content = messages_list[-1].content if hasattr(messages_list[-1], 'content') else str(messages_list[-1])
             frequency = str(raw_content).lower().strip()
             
             chosen_frequency = 'daily'
@@ -53,26 +51,25 @@ class AiNewsNode:
                 days=tavily_days,
             )
 
-            # --- STANDARD STATE UPDATE RULE ---
-            # Return only sliced changes instead of writing into deep local states
             return {
                 "frequency": chosen_frequency,
                 "news_data": response.get('results', []) or [{"content": "No recent tech articles indexed for this timeframe.", "url": "#", "published_date": "2026-06-27"}]
             }
             
         except Exception as e:
-            # Safe Fallback dictionary to force graph to proceed to summarize_news
             return {
                 "frequency": "daily",
                 "news_data": [{"content": f"Bypassed live query fetch. Pipeline exception trace: {str(e)}", "url": "#", "published_date": "2026-06-27"}]
             }
 
     def summarize_news(self, state: dict) -> dict:
-        """Summarize the fetched news using the LLM."""
+        """Summarize the fetched news using the LLM and inject directly into message state."""
         new_items = state.get("news_data", [])
+        frequency = state.get('frequency', 'daily')
         
         if not new_items:
-            return {"summary": "No active data blocks available to summarize."}
+            err_msg = "No active data blocks available to summarize."
+            return {"summary": err_msg, "messages": [AIMessage(content=err_msg)]}
 
         prompt_template = ChatPromptTemplate.from_messages([
             (
@@ -91,32 +88,25 @@ class AiNewsNode:
         
         articles_str = "\n\n".join([
             f"Content: {item.get('content', '')}\nURL: {item.get('url', '')}\nDate: {item.get('published_date', '')}"
+            f"Content: {item.get('content', '')}\nURL: {item.get('url', '')}\nDate: {item.get('published_date', '')}"
             for item in new_items
         ])
         
         prompt_value = prompt_template.invoke({"articles": articles_str})
         response = self.llm.invoke(prompt_value)
         
-        return {"summary": response.content}
+        # --- 🎯 DIRECT CHAT HISTORY STREAM INJECTION ---
+        # Format karke message object banayenge taaki UI direct history se render kare
+        header = f"# {frequency.capitalize()} AI News Summary\n\n"
+        final_markdown = header + response.content
+        
+        return {
+            "summary": final_markdown, 
+            "messages": [AIMessage(content=final_markdown)]
+        }
 
     def save_result(self, state: dict) -> dict:
-        """Saves the generated summary markdown into the filesystem cleanly."""
-        frequency = state.get('frequency', 'ai')
-        summary = state.get('summary', '')
-        
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        if "src" in current_dir:
-            project_root = current_dir.split("src")[0]
-        else:
-            project_root = current_dir
-
-        target_dir = os.path.join(project_root, "AINews")
-        os.makedirs(target_dir, exist_ok=True)
-        
-        filename = os.path.join(target_dir, f"{frequency}_summary.md")
-        
-        with open(filename, 'w', encoding='utf-8') as f:
-            f.write(f"# {frequency.capitalize()} AI News Summary\n\n")
-            f.write(summary)
-            
-        return {"filename": filename}
+        """🎯 NO DISK WRITE! File system bypassed completely."""
+        # Disk par open() karke file write karne ka code 100% delete kar diya hai!
+        # Ab cloud sandbox par koi error nahi aayega aur graph smooth end hoga.
+        return {"filename": "Memory_Bypassed_Direct_Show"}
