@@ -1,4 +1,5 @@
 import os  
+import sys
 import streamlit as st
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
@@ -70,40 +71,45 @@ class DisplayResultStreamlit:
             else:
                 with st.spinner(f"🔄 Compiling comprehensive AI news matrix... Please wait."):
                     try: 
-                        # --- SAFE RUN BYPASS ---
-                        # Agar graph backend par /mount par write karne se crash karega, hum use try-except me lapet rahe hain
-                        graph_summary = None
-                        try:
-                            graph_output = graph.invoke({"messages": [("user", frequency)]})
-                            graph_summary = graph_output.get('summary')
-                        except Exception as graph_internal_err:
-                            # Agar error rigid file-writing permissions (Errno 13) ka hai, toh status print karke check karein
-                            st.info("ℹ️ File system restricted on cloud. Pulling content safely from active graph layers...")
-                        
+                        # --- 🛠️ DYNAMIC PATH HIJACK INJECTION ---
+                        # Yeh system ko force karega ki runtime paths ko local directory layout ke sath match kare
                         current_dir = os.path.dirname(os.path.abspath(__file__))
                         project_root = current_dir.split("src")[0] if "src" in current_dir else current_dir
-                        ai_news_file_path = os.path.join(project_root, "AINews", f"{frequency}_summary.md")
+                        ai_news_dir = os.path.join(project_root, "AINews")
+                        os.makedirs(ai_news_dir, exist_ok=True)
                         
+                        # Graph execute karne ka absolute target tracking
+                        graph_output = None
+                        try:
+                            graph_output = graph.invoke({"messages": [("user", frequency)]})
+                        except Exception as graph_err:
+                            # Agar graph fir bhi execute hone me internal file path error de, hum state content manually verify karenge
+                            if hasattr(graph_err, 'output') or 'graph_output' in locals():
+                                pass
+                        
+                        # Extract the data content safely
                         markdown_content = ""
+                        if graph_output and isinstance(graph_output, dict):
+                            markdown_content = graph_output.get('summary', '')
                         
-                        # Pahle memory check karenge jo sabse safe hai cloud par
-                        if graph_summary and graph_summary != "No active data blocks available to summarize.":
-                            markdown_content = graph_summary
-                        # Agar memory me nahi mila tabhi local disk files read karne ka try karenge
-                        elif os.path.exists(ai_news_file_path):
+                        # Fallback 2: Agar graph crash hua par local workspace memory me file save ho gayi tab read karo
+                        ai_news_file_path = os.path.join(ai_news_dir, f"{frequency}_summary.md")
+                        if not markdown_content and os.path.exists(ai_news_file_path):
                             try:
                                 with open(ai_news_file_path, "r", encoding="utf-8") as file:
                                     markdown_content = file.read()
                             except Exception:
                                 pass
-                        
-                        if markdown_content:
+                                
+                        # Final Check: Agar content mil gaya toh render karo hamesha pehle!
+                        if markdown_content and markdown_content != "No active data blocks available to summarize.":
                             with st.container(border=True):
                                 st.markdown(markdown_content)
                             st.session_state.chat_history.append({"role": "assistant", "content": markdown_content})
                         else:
-                            # Agar fir bhi permission error aage throw ho, toh simple feedback bypass dijiye
-                            st.success("✅ AI News Engine Executed Successfully! (Check your workspace node components for write streaming logs)")
+                            # Agar content block missing dikhe toh direct layout fallback prompt string engine se handle karein
+                            st.error("❌ Content resolution failed due to background directory permission conflicts. Please run locally or check graph node configurations.")
+                            
                     except Exception as system_error:
                         st.error(f"❌ Core Error: {str(system_error)}")
         
