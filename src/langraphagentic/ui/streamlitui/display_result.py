@@ -1,6 +1,28 @@
-import os  
+import os
+import sys
+import builtins
 import streamlit as st
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+
+# --- 🎯 DIRECT SHOW INTERCEPTOR (NO FILE SYSTEM WRITE) ---
+# Yeh code backend nodes ke file saving logic ko runtime par hijack kar lega
+# Taaki cloud par kisi bhi tarah ka Permission Error (Errno 13) na aaye
+original_open = builtins.open
+
+def cloud_safe_open(file, mode='r', *args, **kwargs):
+    if isinstance(file, str) and ("/mount/" in file or "AINews" in file or "GeneratedBlogs" in file):
+        # Fake file handler class jo memory me hi write operations ko fake kar deti hai
+        class FakeFile:
+            def __enter__(self): return self
+            def __exit__(self, exc_type, exc_val, exc_tb): pass
+            def write(self, content): st.session_state['last_intercepted_content'] = content
+            def read(self): return st.session_state.get('last_intercepted_content', '')
+        return FakeFile()
+    return original_open(file, mode, *args, **kwargs)
+
+# Patch ko application me apply karein
+builtins.open = cloud_safe_open
+# ---------------------------------------------------------
 
 class DisplayResultStreamlit:
     def __init__(self, usecase, graph, user_message):
@@ -12,6 +34,10 @@ class DisplayResultStreamlit:
         usecase = self.usecase
         graph = self.graph
         user_message = self.user_message
+        
+        # Initialize internal storage if not exist
+        if 'last_intercepted_content' not in st.session_state:
+            st.session_state['last_intercepted_content'] = ""
         
         # --- 1. USECASE: BASIC CHATBOT ---
         if usecase in ["Basic Chatbot", "Basic Chatbort"]:
@@ -58,64 +84,57 @@ class DisplayResultStreamlit:
         # --- 3. USECASE: AI NEWS MANAGEMENT ---
         elif usecase == "AI News":
             clean_input = str(user_message).strip().lower()
-            
-            frequency = None
-            for timeframe in ['daily', 'weekly', 'monthly', 'year']:
-                if timeframe in clean_input:
-                    frequency = timeframe
-                    break
+            frequency = next((t for t in ['daily', 'weekly', 'monthly', 'year'] if t in clean_input), None)
             
             if not frequency:
                 st.warning("⚠️ Clear frequency configuration target missing.")
             else:
-                with st.spinner(f"🔄 Compiling comprehensive AI news matrix... Please wait."):
+                with st.spinner("🔄 Compiling AI news matrix... Please wait."):
+                    st.session_state['last_intercepted_content'] = "" # Reset
                     try: 
                         graph_output = graph.invoke({"messages": [("user", frequency)]})
-                        graph_summary = graph_output.get('summary')
                         
-                        current_dir = os.path.dirname(os.path.abspath(__file__))
-                        project_root = current_dir.split("src")[0] if "src" in current_dir else current_dir
-                        ai_news_file_path = os.path.join(project_root, "AINews", f"{frequency}_summary.md")
-                        
+                        # Data Extraction Preference: Memory State -> Intercepted Content
                         markdown_content = ""
-                        if os.path.exists(ai_news_file_path):
-                            with open(ai_news_file_path, "r", encoding="utf-8") as file:
-                                markdown_content = file.read()
-                        elif graph_summary and graph_summary != "No active data blocks available to summarize.":
-                            markdown_content = graph_summary
+                        if graph_output and isinstance(graph_output, dict):
+                            markdown_content = graph_output.get('summary', '')
+                        
+                        if not markdown_content:
+                            markdown_content = st.session_state['last_intercepted_content']
                         
                         if markdown_content:
-                            with st.container(border=True):
+                            with st.chat_message("assistant", avatar="📆"):
                                 st.markdown(markdown_content)
                             st.session_state.chat_history.append({"role": "assistant", "content": markdown_content})
                         else:
-                            st.error("❌ State tracking lost.")
+                            st.error("⚠️ Content resolution failed. Try running again.")
                     except Exception as system_error:
                         st.error(f"❌ Core Error: {str(system_error)}")
         
         # --- 4. USECASE: BLOG GENERATOR ---
         elif usecase == "Blog Generator":
             with st.spinner("✍️ Writing publication-ready technical blog... Please wait."):
+                st.session_state['last_intercepted_content'] = "" # Reset
                 try:
                     graph_output = graph.invoke({"messages": [("user", user_message)]})
-                    blog_text = graph_output.get('blog_content')
                     
-                    if not blog_text and graph_output.get('blog'):
-                        blog_obj = graph_output.get('blog')
-                        if hasattr(blog_obj, 'title') and hasattr(blog_obj, 'content'):
-                            blog_text = f"# {blog_obj.title}\n\n{blog_obj.content}"
-                        elif isinstance(blog_obj, dict):
-                            blog_text = f"# {blog_obj.get('title', '')}\n\n{blog_obj.get('content', '')}"
+                    blog_text = ""
+                    if graph_output and isinstance(graph_output, dict):
+                        blog_text = graph_output.get('blog_content', '')
+                        if not blog_text and graph_output.get('blog'):
+                            blog_obj = graph_output.get('blog')
+                            if hasattr(blog_obj, 'content'): blog_text = blog_obj.content
+                            elif isinstance(blog_obj, dict): blog_text = blog_obj.get('content', '')
+                    
+                    # Agar graph state me nahi mila, toh automatic fake-file handler se uthayenge
+                    if not blog_text:
+                        blog_text = st.session_state['last_intercepted_content']
                     
                     if blog_text:
-                        # Clean and elegant standard container
-                        with st.container(border=True):
+                        with st.chat_message("assistant", avatar="📝"):
                             st.markdown(blog_text)
-                        
                         st.session_state.chat_history.append({"role": "assistant", "content": blog_text})
-                        st.markdown("<br>", unsafe_allow_html=True) # <-- Sahi argument update kar diya hai
-                        st.download_button("📥 Export Production Blog (.md)", data=blog_text, file_name="generated_blog.md", use_container_width=True)
                     else:
-                        st.error("⚠️ State sync failed: No content returned.")
+                        st.error("⚠️ Failed to extract generated blog from memory state.")
                 except Exception as e:
                     st.error(f"❌ Execution Error inside Blog Chain: {str(e)}")
